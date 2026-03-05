@@ -16,42 +16,46 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    touch-action: none;
   }
   #hud {
-    width: 1125px;
+    width: min(1125px, 100vw);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 12px 6px;
+    padding: 6px 10px 5px;
     background: #1a0800;
     border: 3px solid #c8620a;
     border-bottom: none;
+    box-sizing: border-box;
   }
   #title {
     color: #f5a623;
-    font-size: 11px;
+    font-size: clamp(7px, 2.2vw, 11px);
     text-shadow: 2px 2px #8B3A00;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
     white-space: nowrap;
   }
   #scoreBoard {
     display: flex;
-    gap: 28px;
+    gap: clamp(8px, 2.5vw, 28px);
   }
-  #scoreBoard span { color: #e8c9a0; font-size: 8px; }
+  #scoreBoard span { color: #e8c9a0; font-size: clamp(5px, 1.6vw, 8px); }
   #scoreBoard span b { color: #f5a623; }
   #gameWrapper {
     position: relative;
-    width: 1125px;
-    height: 450px;
+    /* Scale to fit screen width on mobile, max 1125px on desktop */
+    width: min(1125px, 100vw);
+    /* Keep 1125:450 aspect ratio */
+    aspect-ratio: 1125 / 450;
     border: 3px solid #c8620a;
     box-shadow: 0 0 40px #c8620a44;
     overflow: hidden;
   }
   canvas {
     display: block;
-    width: 1125px;
-    height: 450px;
+    width: 100%;
+    height: 100%;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
   }
@@ -120,8 +124,8 @@
     <p>Race across the African savanna!<br>Dodge obstacles to survive!</p>
     <button class="btn" onclick="startGame()">▶ START GAME</button>
     <div id="instructions">
-      SPACE / ↑ / CLICK = JUMP<br>
-      ↓ or S = DUCK under birds
+      SPACE / ↑ / CLICK = JUMP &nbsp; ↓ / S = DUCK<br>
+      MOBILE: TAP TOP = JUMP &nbsp; TAP BOTTOM = DUCK
     </div>
   </div>
 </div>
@@ -148,7 +152,6 @@ let obstacleCooldown = 80;
 let jumpCount = 0;
 let isDucking = false;
 let loopRunning = false;
-
 // ---- HARE ----
 const hare = {
   x: 110,
@@ -837,9 +840,25 @@ canvas.addEventListener('click', () => {
   if (state === 'running') hare.jump();
   else if (state === 'idle') startGame();
 });
+
+// Mobile touch: tap upper 70% = jump, tap lower 30% = duck
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
-  if (state === 'running') hare.jump();
+  if (state === 'idle') { startGame(); return; }
+  if (state !== 'running') return;
+  const touch = e.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  const relY = (touch.clientY - rect.top) / rect.height;
+  if (relY > 0.7) {
+    isDucking = true;
+  } else {
+    hare.jump();
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  isDucking = false;
 }, { passive: false });
 
 initBackground();
