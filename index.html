@@ -633,7 +633,8 @@ function drawBackground() {
   ctx.fillRect(sx-20, sy+36, 88, 12);
 
   // Static background acacia silhouettes
-  ctx.fillStyle = '#3a1a00';
+  ctx.fillStyle = '#8B5A2B';
+  ctx.globalAlpha = 0.45;
   bgTrees.forEach(t => {
     const ty = GROUND - t.h;
     const tw = Math.floor(t.h * 0.95);
@@ -643,6 +644,7 @@ function drawBackground() {
     ctx.fillRect(Math.floor(t.x), Math.floor(ty), tw, Math.floor(t.h*0.3));
     ctx.fillRect(Math.floor(t.x + t.h*0.08), Math.floor(ty - 7), Math.floor(tw*0.76), 10);
   });
+  ctx.globalAlpha = 1.0;
 
   // Ground
   ctx.fillStyle = '#7a3808';
