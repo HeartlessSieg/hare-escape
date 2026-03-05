@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Hare Escape</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0f0400;
+    font-family: 'Press Start 2P', monospace;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  #hud {
+    width: 1125px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px 6px;
+    background: #1a0800;
+    border: 3px solid #c8620a;
+    border-bottom: none;
+  }
+  #title {
+    color: #f5a623;
+    font-size: 11px;
+    text-shadow: 2px 2px #8B3A00;
+    letter-spacing: 2px;
+    white-space: nowrap;
+  }
+  #scoreBoard {
+    display: flex;
+    gap: 28px;
+  }
+  #scoreBoard span { color: #e8c9a0; font-size: 8px; }
+  #scoreBoard span b { color: #f5a623; }
+  #gameWrapper {
+    position: relative;
+    width: 1125px;
+    height: 450px;
+    border: 3px solid #c8620a;
+    box-shadow: 0 0 40px #c8620a44;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    width: 1125px;
+    height: 450px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  #overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15,5,0,0.88);
+  }
+  #overlay h2 {
+    color: #f5a623;
+    font-size: clamp(12px, 2vw, 18px);
+    margin-bottom: 14px;
+    text-shadow: 3px 3px #000;
+    text-align: center;
+    line-height: 2.2;
+  }
+  #overlay p {
+    color: #e8c9a0;
+    font-size: clamp(6px, 0.9vw, 9px);
+    margin-bottom: 6px;
+    text-align: center;
+    line-height: 2.2;
+  }
+  #overlay .btn {
+    margin-top: 14px;
+    padding: 12px 24px;
+    background: #c8620a;
+    color: #fff8ee;
+    font-family: 'Press Start 2P', monospace;
+    font-size: clamp(8px, 1.1vw, 11px);
+    border: none;
+    cursor: pointer;
+    box-shadow: 4px 4px #7a3400;
+    transition: transform 0.1s;
+  }
+  #overlay .btn:hover { background: #e07010; }
+  #overlay .btn:active { transform: translate(2px,2px); box-shadow: 2px 2px #7a3400; }
+  #instructions {
+    margin-top: 10px;
+    color: #b08060;
+    font-size: clamp(5px, 0.8vw, 8px);
+    text-align: center;
+    line-height: 2.4;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div id="title">THE HARE ESCAPE</div>
+  <div id="scoreBoard">
+    <span>SCORE: <b id="scoreVal">0</b></span>
+    <span>HI-SCORE: <b id="hiVal">0</b></span>
+    <span>SPEED: <b id="speedVal">1.0</b></span>
+  </div>
+</div>
+
+<div id="gameWrapper">
+  <canvas id="gameCanvas" width="1125" height="450"></canvas>
+  <div id="overlay">
+    <h2>THE HARE<br>ESCAPE</h2>
+    <p>Race across the African savanna!<br>Dodge obstacles to survive!</p>
+    <button class="btn" onclick="startGame()">▶ START GAME</button>
+    <div id="instructions">
+      SPACE / ↑ / CLICK = JUMP<br>
+      ↓ or S = DUCK under birds
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const W = canvas.width;
+const H = canvas.height;
+const GROUND = Math.floor(H * 0.667);  // ground at 2/3 down = 240px
+const P = 4;
+
+let state = 'idle';
+let score = 0;
+let hiScore = 0;
+let frame = 0;
+let gameSpeed = 5;
+let obstacles = [];
+let bgTrees = [];
+let particles = [];
+let obstacleCooldown = 80;
+let jumpCount = 0;
+let isDucking = false;
+let loopRunning = false;
+
+// ---- HARE ----
+const hare = {
+  x: 110,
+  y: GROUND,
+  vy: 0,
+  width: 32,
+  height: 40,
+  duckHeight: 20,
+  animFrame: 0,
+  animTimer: 0,
+  dead: false,
+
+  get currentHeight() {
+    return (isDucking && this.y >= GROUND) ? this.duckHeight : this.height;
+  },
+
+  jump() {
+    if (jumpCount < 1) {
+      this.vy = -11.0;
+      jumpCount++;
+      isDucking = false;
+      spawnDustParticles(this.x + this.width / 2, this.y);
+    }
+  },
+
+  update() {
+    this.vy += 0.62;
+    this.y += this.vy;
+    if (this.y >= GROUND) {
+      this.y = GROUND;
+      this.vy = 0;
+      jumpCount = 0;
+    }
+    this.animTimer++;
+    if (this.animTimer > (isDucking ? 8 : 5)) {
+      this.animFrame = (this.animFrame + 1) % 4;
+      this.animTimer = 0;
+    }
+  },
+
+  draw() {
+    const x = Math.floor(this.x);
+    const inAir = this.y < GROUND;
+    const ducking = isDucking && !inAir;
+    const f = inAir ? 2 : this.animFrame;
+    const p = P;
+
+    if (ducking) {
+      ctx.fillStyle = '#C8956C';
+      ctx.fillRect(x, GROUND - p*5, p*9, p*4);
+      ctx.fillStyle = '#DDB080';
+      ctx.fillRect(x+p*6, GROUND - p*6, p*4, p*2);
+      ctx.fillStyle = '#E06040';
+      ctx.fillRect(x+p*8, GROUND - p*4, p, p);
+      ctx.fillStyle = '#2c1a00';
+      ctx.fillRect(x+p*7, GROUND - p*5, p, p);
+      ctx.fillStyle = '#FFF8EE';
+      ctx.fillRect(x, GROUND - p*4, p*2, p*2);
+      ctx.fillStyle = '#A06840';
+      ctx.fillRect(x+p*2, GROUND - p*2, p*2, p*2);
+      ctx.fillRect(x+p*5, GROUND - p*2, p*2, p*2);
+      return;
+    }
+
+    const baseY = Math.floor(this.y - this.height);
+
+    // Ears
+    ctx.fillStyle = '#DDB080';
+    ctx.fillRect(x+p*3, baseY - p*5, p*2, p*6);
+    ctx.fillRect(x+p*5+2, baseY - p*4, p*2, p*5);
+    ctx.fillStyle = '#E06040';
+    ctx.fillRect(x+p*3+1, baseY - p*5+2, p-1, p*4);
+    ctx.fillRect(x+p*5+3, baseY - p*4+2, p-1, p*3);
+
+    // Head
+    ctx.fillStyle = '#C8956C';
+    ctx.fillRect(x+p*2, baseY, p*6, p*4);
+    ctx.fillStyle = '#2c1a00';
+    ctx.fillRect(x+p*6, baseY+p, p, p);
+    ctx.fillStyle = '#E06040';
+    ctx.fillRect(x+p*7, baseY+p*2, p, p);
+
+    // Body
+    ctx.fillStyle = '#C8956C';
+    ctx.fillRect(x+p, baseY+p*3, p*7, p*5);
+    ctx.fillStyle = '#A06840';
+    ctx.fillRect(x+p, baseY+p*7, p*7, p*2);
+
+    // Tail
+    ctx.fillStyle = '#FFF8EE';
+    ctx.fillRect(x, baseY+p*4, p*2, p*3);
+
+    // Legs
+    ctx.fillStyle = '#A06840';
+    if (inAir) {
+      ctx.fillRect(x+p*2, baseY+p*7, p*3, p*2);
+      ctx.fillRect(x+p*5, baseY+p*7, p*2, p*2);
+    } else {
+      if (f === 0) {
+        ctx.fillRect(x+p*2, baseY+p*8, p, p*3);
+        ctx.fillRect(x+p*5, baseY+p*8, p, p*3);
+        ctx.fillRect(x+p*2, baseY+p*10, p*3, p);
+        ctx.fillRect(x+p*5, baseY+p*10, p*3, p);
+      } else if (f === 1) {
+        ctx.fillRect(x+p*2, baseY+p*7, p*2, p*4);
+        ctx.fillRect(x+p*4, baseY+p*10, p*3, p);
+        ctx.fillRect(x+p*5, baseY+p*7, p, p*2);
+        ctx.fillRect(x+p*5, baseY+p*9, p*3, p);
+      } else if (f === 2) {
+        ctx.fillRect(x+p*2, baseY+p*8, p, p*4);
+        ctx.fillRect(x+p*3, baseY+p*11, p*2, p);
+        ctx.fillRect(x+p*5, baseY+p*7, p*2, p*4);
+        ctx.fillRect(x+p*6, baseY+p*10, p*2, p);
+      } else {
+        ctx.fillRect(x+p*2, baseY+p*7, p*2, p*2);
+        ctx.fillRect(x+p*2, baseY+p*9, p*4, p);
+        ctx.fillRect(x+p*5, baseY+p*8, p, p*3);
+        ctx.fillRect(x+p*5, baseY+p*10, p*3, p);
+      }
+    }
+  }
+};
+
+// ---- OBSTACLE FACTORY ----
+function makeObstacle(x, type) {
+  const defs = {
+    rock:        { w: 28,  h: 28,  aerial: false },
+    rock_tall:   { w: 24,  h: 44,  aerial: false },
+    rock_group:  { w: 52,  h: 32,  aerial: false },
+    termite:     { w: 20,  h: 52,  aerial: false },
+    shrub:       { w: 32,  h: 30,  aerial: false },
+    thornbush:   { w: 28,  h: 24,  aerial: false },
+    thornbush2:  { w: 60,  h: 24,  aerial: false },
+    log:         { w: 40,  h: 20,  aerial: false },
+    log_tall:    { w: 20,  h: 40,  aerial: false },
+    bird_low:    { w: 32,  h: 18,  aerial: true, fy: GROUND - 54 },
+    bird_mid:    { w: 32,  h: 18,  aerial: true, fy: GROUND - 95 },
+    bird_high:   { w: 32,  h: 18,  aerial: true, fy: GROUND - 138 },
+  };
+  const d = defs[type];
+  return {
+    x, type,
+    width: d.w,
+    height: d.h,
+    y: d.aerial ? d.fy + d.h : GROUND,
+    aerial: d.aerial,
+    floatY: d.fy || 0,
+    animFrame: 0,
+    animTimer: 0,
+  };
+}
+
+function spawnGroup() {
+  const groundShort = ['rock','thornbush','log'];
+  const groundTall  = ['rock_tall','rock_group','termite','shrub','thornbush2','log_tall'];
+  const groundAll   = [...groundShort, ...groundTall];
+  const GAP = 28;
+
+  const r = Math.random();
+  let group = [];
+
+  function cluster(count, startX) {
+    let cx = startX;
+    for (let i = 0; i < count; i++) {
+      const t = groundShort[Math.floor(Math.random() * groundShort.length)];
+      const ob = makeObstacle(cx, t);
+      group.push(ob);
+      cx = ob.x + ob.width + GAP;
+    }
+  }
+
+  // birdGap: scales pixel spacing with current speed so reaction time stays constant.
+  // Base gap in "frames of travel time" * current speed = screen pixels needed.
+  // At speed 5 → ~170px. At speed 15 → ~510px. At speed 21 → ~714px.
+  function birdGap(basePx) {
+    return Math.round(basePx * (gameSpeed / 5));
+  }
+
+  // Bird + ground combos — spacing scales with speed so always fair.
+  // Variant A: ground first, then bird after a speed-scaled gap
+  // Variant B: bird first, then ground after a speed-scaled gap
+  function groundWithBirdAbove(startX) {
+    const t = groundShort[Math.floor(Math.random() * groundShort.length)];
+    if (Math.random() < 0.5) {
+      // Variant A: jump ground, land safely, then bird comes
+      const ob = makeObstacle(startX, t);
+      group.push(ob);
+      group.push(makeObstacle(ob.x + ob.width + birdGap(170), 'bird_mid'));
+    } else {
+      // Variant B: duck bird, then jump ground
+      const birdOb = makeObstacle(startX, 'bird_high');
+      group.push(birdOb);
+      group.push(makeObstacle(startX + birdGap(190), t));
+    }
+  }
+
+  // ── Phase 1: 0–1000 — solo simple ground only ──
+  if (score < 1000) {
+    const simpleOnly = ['rock','thornbush','log','rock_tall','log_tall'];
+    group.push(makeObstacle(W + 50, simpleOnly[Math.floor(Math.random() * simpleOnly.length)]));
+
+  // ── Phase 2: 1000–2000 — pairs + first high birds ──
+  } else if (score < 2000) {
+    if (r < 0.25) {
+      group.push(makeObstacle(W + 50, 'bird_high'));
+    } else if (r < 0.55) {
+      cluster(2, W + 50);
+    } else {
+      group.push(makeObstacle(W + 50, groundAll[Math.floor(Math.random() * groundAll.length)]));
+    }
+
+  // ── Phase 3: 2000–4000 — all birds, mixed, triples, bird-above intro ──
+  } else if (score < 4000) {
+    if (r < 0.18) {
+      group.push(makeObstacle(W + 50, Math.random() < 0.5 ? 'bird_high' : 'bird_mid'));
+    } else if (r < 0.30) {
+      const ob1 = makeObstacle(W + 50, groundShort[Math.floor(Math.random() * groundShort.length)]);
+      group.push(ob1);
+      group.push(makeObstacle(ob1.x + ob1.width + birdGap(180), Math.random() < 0.5 ? 'bird_mid' : 'bird_high'));
+    } else if (r < 0.44) {
+      groundWithBirdAbove(W + 50);
+    } else if (r < 0.64) {
+      cluster(2, W + 50);
+    } else if (r < 0.80) {
+      cluster(3, W + 50);
+    } else {
+      group.push(makeObstacle(W + 50, groundAll[Math.floor(Math.random() * groundAll.length)]));
+    }
+
+  // ── Phase 4: 4000–7500 — full birds, clusters, bird-above combos ──
+  } else if (score < 7500) {
+    if (r < 0.18) {
+      group.push(makeObstacle(W + 50, ['bird_low','bird_mid','bird_high'][Math.floor(Math.random()*3)]));
+    } else if (r < 0.32) {
+      const ob1 = makeObstacle(W + 50, groundShort[Math.floor(Math.random() * groundShort.length)]);
+      group.push(ob1);
+      group.push(makeObstacle(ob1.x + ob1.width + birdGap(170), Math.random() < 0.5 ? 'bird_mid' : 'bird_high'));
+    } else if (r < 0.48) {
+      groundWithBirdAbove(W + 50);
+    } else if (r < 0.64) {
+      cluster(3, W + 50);
+    } else if (r < 0.80) {
+      cluster(4, W + 50);
+    } else {
+      cluster(2, W + 50);
+    }
+
+  // ── Phase 5: 7500+ — max difficulty ──
+  } else {
+    if (r < 0.16) {
+      group.push(makeObstacle(W + 50, ['bird_low','bird_mid','bird_high'][Math.floor(Math.random()*3)]));
+    } else if (r < 0.32) {
+      const ob1 = makeObstacle(W + 50, groundShort[Math.floor(Math.random() * groundShort.length)]);
+      group.push(ob1);
+      group.push(makeObstacle(ob1.x + ob1.width + birdGap(160), ['bird_mid','bird_high'][Math.floor(Math.random()*2)]));
+    } else if (r < 0.48) {
+      groundWithBirdAbove(W + 50);
+    } else if (r < 0.62) {
+      cluster(3, W + 50);
+    } else if (r < 0.76) {
+      cluster(4, W + 50);
+    } else {
+      const ob1 = makeObstacle(W + 50, groundAll[Math.floor(Math.random() * groundAll.length)]);
+      group.push(ob1);
+      group.push(makeObstacle(ob1.x + ob1.width + 20, groundShort[Math.floor(Math.random() * groundShort.length)]));
+    }
+  }
+
+  obstacles.push(...group);
+}
+
+// ---- DRAW OBSTACLES ----
+function drawObstacle(ob) {
+  const p = P;
+  const x = Math.floor(ob.x);
+  if (ob.aerial) { drawBird(ob); return; }
+  const y = Math.floor(ob.y - ob.height);
+
+  if (ob.type === 'rock') {
+    ctx.fillStyle = '#9B5A1A';
+    ctx.fillRect(x+p, y+p*2, p*5, p*5);
+    ctx.fillRect(x,   y+p*4, p*7, p*3);   // full-width solid base
+    ctx.fillRect(x,   y+p*6, p*7, p);     // solid bottom edge
+    ctx.fillStyle = '#C07830';
+    ctx.fillRect(x+p, y+p*2, p*2, p*2);
+    ctx.fillStyle = '#6B3A0A';
+    ctx.fillRect(x+p*4, y+p*5, p*2, p*2);
+
+  } else if (ob.type === 'rock_tall') {
+    ctx.fillStyle = '#9B5A1A';
+    ctx.fillRect(x+p, y,     p*4, p*10);
+    ctx.fillRect(x,   y+p*4, p*6, p*6);   // full-width solid base
+    ctx.fillStyle = '#C07830';
+    ctx.fillRect(x+p, y,     p*2, p*4);
+    ctx.fillStyle = '#6B3A0A';
+    ctx.fillRect(x+p*4, y+p*7, p*2, p*3);
+    ctx.fillRect(x,   y+p*9, p*6, p);     // solid bottom edge
+
+  } else if (ob.type === 'rock_group') {
+    ctx.fillStyle = '#9B5A1A';
+    ctx.fillRect(x,    y+p*4, p*6, p*4);
+    ctx.fillRect(x+p,  y+p*2, p*4, p*3);
+    ctx.fillStyle = '#7a4010';
+    ctx.fillRect(x+p*7, y+p*2, p*5, p*6);
+    ctx.fillRect(x+p*6, y+p*5, p*7, p*3);
+    ctx.fillStyle = '#b07030';
+    ctx.fillRect(x+p*10, y+p*4, p*3, p*4);
+    ctx.fillRect(x+p*9,  y+p*6, p*4, p*2);
+    // solid base across full group width
+    ctx.fillStyle = '#7a3808';
+    ctx.fillRect(x,      y+p*7, p*13, p);
+    ctx.fillStyle = '#C07830';
+    ctx.fillRect(x+p, y+p*2, p, p*2);
+    ctx.fillRect(x+p*8, y+p*2, p, p*2);
+
+  } else if (ob.type === 'termite') {
+    ctx.fillStyle = '#8B4010';
+    ctx.fillRect(x+p*2, y,     p*2, p*13);
+    ctx.fillRect(x+p,   y+p*3, p*4, p*10);
+    ctx.fillRect(x,     y+p*8, p*5, p*5);
+    ctx.fillRect(x,     y+p*12,p*5, p);    // solid bottom edge
+    ctx.fillStyle = '#A05020';
+    ctx.fillRect(x+p*2, y,     p,   p*7);
+    ctx.fillRect(x+p+1, y+p*4, p,   p*4);
+    ctx.fillStyle = '#6B3000';
+    ctx.fillRect(x+p*3, y+p*9, p*2, p*4);
+    ctx.fillStyle = '#7a3800';
+    ctx.fillRect(x+p,   y+p*6, p*3, p);
+    ctx.fillRect(x,     y+p*10,p*4, p);
+
+  } else if (ob.type === 'shrub') {
+    // wide round savanna shrub — full solid base touching ground
+    ctx.fillStyle = '#5a7a10';
+    ctx.fillRect(x+p,   y+p*4, p*7, p*4);   // solid base row — full width at ground
+    ctx.fillRect(x+p*2, y+p*2, p*5, p*3);   // mid layer
+    ctx.fillRect(x+p*3, y,     p*3, p*3);   // top dome
+    ctx.fillStyle = '#7aaa1a';               // lighter highlights
+    ctx.fillRect(x+p*2, y+p*2, p*2, p*2);
+    ctx.fillRect(x+p*5, y+p*3, p*2, p*2);
+    ctx.fillRect(x+p*3, y,     p*2, p*2);
+    ctx.fillStyle = '#e8d080';               // dry savanna thorn tips
+    ctx.fillRect(x,     y+p*5, p,   p);
+    ctx.fillRect(x+p*7, y+p*4, p,   p);
+    ctx.fillRect(x+p*4, y-p,   p,   p);
+    ctx.fillRect(x+p*2, y+p*6, p,   p);
+    ctx.fillRect(x+p*6, y+p*6, p,   p);
+
+  } else if (ob.type === 'thornbush') {
+    ctx.fillStyle = '#4a6010';
+    ctx.fillRect(x,     y+p*4, p*7, p*2);  // solid full-width base
+    ctx.fillRect(x+p,   y+p*2, p*5, p*3);
+    ctx.fillRect(x+p*2, y,     p*3, p*3);
+    ctx.fillStyle = '#6a8818';
+    ctx.fillRect(x+p*2, y+p*2, p, p*2);
+    ctx.fillRect(x+p*4, y+p*3, p, p);
+    ctx.fillStyle = '#e8d080';
+    ctx.fillRect(x,     y+p*3, p, p);
+    ctx.fillRect(x+p*6, y+p*2, p, p);
+    ctx.fillRect(x+p*3, y-p,   p, p);
+    ctx.fillRect(x+p*2, y+p*5, p, p);
+
+  } else if (ob.type === 'thornbush2') {
+    for (let i = 0; i < 2; i++) {
+      const ox = x + i * (p*7+6);
+      ctx.fillStyle = i === 0 ? '#4a6010' : '#3d5208';
+      ctx.fillRect(ox,     y+p*4, p*7, p*2);  // solid full-width base
+      ctx.fillRect(ox+p,   y+p*2, p*5, p*3);
+      ctx.fillRect(ox+p*2, y,     p*3, p*3);
+      ctx.fillStyle = '#6a8818';
+      ctx.fillRect(ox+p*2, y+p*2, p, p*2);
+      ctx.fillStyle = '#e8d080';
+      ctx.fillRect(ox,     y+p*3, p, p);
+      ctx.fillRect(ox+p*6, y+p*2, p, p);
+      ctx.fillRect(ox+p*3, y-p,   p, p);
+    }
+
+  } else if (ob.type === 'log') {
+    ctx.fillStyle = '#7a4010';
+    ctx.fillRect(x, y+p*2, p*10, p*3);
+    ctx.fillStyle = '#9a5820';
+    ctx.fillRect(x, y+p*2, p*10, p);
+    ctx.fillStyle = '#5a2800';
+    ctx.fillRect(x, y+p*4, p*10, p);    // solid bottom edge = full width
+    ctx.fillStyle = '#b07030';
+    ctx.fillRect(x,     y+p*2, p*2, p*3);
+    ctx.fillRect(x+p*8, y+p*2, p*2, p*3);
+    ctx.fillStyle = '#8a5010';
+    ctx.fillRect(x+p, y+p*3, p, p);
+
+  } else if (ob.type === 'log_tall') {
+    ctx.fillStyle = '#7a4010';
+    ctx.fillRect(x+p,   y,      p*3, p*10);
+    ctx.fillRect(x,     y+p*8,  p*5, p*2);  // solid wide base at ground
+    ctx.fillStyle = '#9a5820';
+    ctx.fillRect(x+p,   y,      p,   p*10);
+    ctx.fillStyle = '#5a2800';
+    ctx.fillRect(x+p*3, y,      p,   p*10);
+    ctx.fillStyle = '#7a4010';
+    ctx.fillRect(x+p*2, y-p*2,  p,   p*2);  // pointed top
+  }
+}
+
+function drawBird(ob) {
+  const p = P;
+  const x = Math.floor(ob.x);
+  const y = Math.floor(ob.floatY);
+  ob.animTimer++;
+  if (ob.animTimer > 7) { ob.animFrame = (ob.animFrame + 1) % 2; ob.animTimer = 0; }
+  const wing = ob.animFrame === 0 ? -p : p;
+
+  // Bird faces LEFT (toward hare)
+  // body
+  ctx.fillStyle = '#2c1800';
+  ctx.fillRect(x+p*3, y+p*2, p*5, p*3);
+  // head (left side)
+  ctx.fillRect(x,     y+p,   p*3, p*3);
+  // beak pointing left
+  ctx.fillStyle = '#c87820';
+  ctx.fillRect(x-p*2, y+p*2, p*2, p);
+  // eye
+  ctx.fillStyle = '#ffdd44';
+  ctx.fillRect(x+p,   y+p*1, p,   p);
+  // tail feathers (right side, fan out)
+  ctx.fillStyle = '#1a0e00';
+  ctx.fillRect(x+p*7, y+p*3, p*4, p);
+  ctx.fillRect(x+p*8, y+p*4, p*2, p);
+  ctx.fillRect(x+p*8, y+p*2, p*2, p);
+  // wings flap (asymmetric for flying look)
+  ctx.fillStyle = '#3a2200';
+  ctx.fillRect(x+p*2, y+p*2+wing, p*3, p*2);
+  ctx.fillRect(x+p*5, y+p*2-wing, p*3, p*2);
+  ctx.fillStyle = '#7a5030';
+  ctx.fillRect(x+p*2, y+p*2+wing, p*2, p);
+  ctx.fillRect(x+p*5, y+p*2-wing, p*2, p);
+}
+
+// ---- BACKGROUND ----
+function initBackground() {
+  // Fixed background acacia silhouettes — static, no scrolling glitch
+  bgTrees = [
+    { x: 90,  h: 55 },
+    { x: 280, h: 42 },
+    { x: 490, h: 62 },
+    { x: 670, h: 38 },
+    { x: 760, h: 50 },
+  ];
+}
+
+function drawBackground() {
+  // Sky - banded sunset
+  const bands = [
+    [0,    0.15, '#6B1A00'],
+    [0.15, 0.30, '#A83000'],
+    [0.30, 0.46, '#D05208'],
+    [0.46, 0.60, '#E87818'],
+    [0.60, 0.75, '#F5A020'],
+    [0.75, 0.88, '#F5C840'],
+    [0.88, 1.00, '#F8DC70'],
+  ];
+  bands.forEach(([s, e, col]) => {
+    ctx.fillStyle = col;
+    ctx.fillRect(0, Math.floor(s*GROUND), W, Math.ceil((e-s)*GROUND)+2);
+  });
+
+  // Large setting sun
+  const sx = W - 120, sy = Math.floor(GROUND * 0.52);
+  // glow halo
+  ctx.fillStyle = '#F5C84030';
+  ctx.fillRect(sx-16, sy-16, 80, 80);
+  ctx.fillStyle = '#F5A02040';
+  ctx.fillRect(sx-8, sy-8, 64, 64);
+  // sun disc
+  ctx.fillStyle = '#FFE066';
+  ctx.fillRect(sx, sy, 48, 48);
+  ctx.fillStyle = '#FFF3A0';
+  ctx.fillRect(sx+4, sy+4, 40, 40);
+  // horizon cut (sun going down)
+  ctx.fillStyle = '#F8DC70';
+  ctx.fillRect(sx-20, sy+36, 88, 12);
+
+  // Static background acacia silhouettes
+  ctx.fillStyle = '#3a1a00';
+  bgTrees.forEach(t => {
+    const ty = GROUND - t.h;
+    const tw = Math.floor(t.h * 0.95);
+    // trunk
+    ctx.fillRect(Math.floor(t.x + t.h*0.38), Math.floor(ty + t.h*0.36), Math.floor(t.h*0.2), Math.floor(t.h*0.64));
+    // flat canopy layers
+    ctx.fillRect(Math.floor(t.x), Math.floor(ty), tw, Math.floor(t.h*0.3));
+    ctx.fillRect(Math.floor(t.x + t.h*0.08), Math.floor(ty - 7), Math.floor(tw*0.76), 10);
+  });
+
+  // Ground
+  ctx.fillStyle = '#7a3808';
+  ctx.fillRect(0, GROUND, W, H-GROUND);
+  ctx.fillStyle = '#9a5010';
+  ctx.fillRect(0, GROUND, W, 9);
+  ctx.fillStyle = '#b06818';
+  ctx.fillRect(0, GROUND, W, 4);
+
+  // Ground cracks/texture scrolling
+  ctx.fillStyle = '#602c06';
+  for (let gx = (-(frame*gameSpeed*0.4)|0) % 52; gx < W; gx += 52) {
+    ctx.fillRect(Math.floor(gx), GROUND+6, 22, 3);
+    ctx.fillRect(Math.floor(gx+28), GROUND+14, 14, 2);
+    ctx.fillRect(Math.floor(gx+10), GROUND+20, 10, 2);
+  }
+  // Dry grass tufts
+  ctx.fillStyle = '#a07828';
+  for (let gx = (-(frame*gameSpeed*0.4)|0) % 60; gx < W; gx += 60) {
+    ctx.fillRect(Math.floor(gx+4), GROUND-4, 3, 6);
+    ctx.fillRect(Math.floor(gx+9), GROUND-6, 3, 8);
+    ctx.fillRect(Math.floor(gx+14), GROUND-3, 3, 5);
+    ctx.fillRect(Math.floor(gx+30), GROUND-5, 3, 7);
+    ctx.fillRect(Math.floor(gx+35), GROUND-3, 3, 5);
+  }
+}
+
+// ---- PARTICLES ----
+function spawnDustParticles(x, y) {
+  for (let i = 0; i < 8; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random()-0.5)*5,
+      vy: -Math.random()*3,
+      life: 22, maxLife: 22,
+      color: ['#C8956C','#A06840','#DDB080','#8B4510'][Math.floor(Math.random()*4)]
+    });
+  }
+}
+
+function spawnDeathParticles(x, y) {
+  for (let i = 0; i < 26; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random()-0.5)*12,
+      vy: -Math.random()*11,
+      life: 55, maxLife: 55,
+      color: ['#E87010','#F5A623','#C84A00','#FFE066','#E8C87A','#CC2200'][Math.floor(Math.random()*6)]
+    });
+  }
+}
+
+// ---- COLLISION ----
+function checkCollision(ob) {
+  const margin = 5;
+  const ch = hare.currentHeight;
+  const hx1 = hare.x + margin;
+  const hx2 = hare.x + hare.width - margin;
+  const hy1 = hare.y - ch + margin;
+  const hy2 = hare.y - (isDucking && hare.y >= GROUND ? 4 : 0);
+
+  let ox1, ox2, oy1, oy2;
+  if (ob.aerial) {
+    ox1 = ob.x + margin;
+    ox2 = ob.x + ob.width - margin;
+    oy1 = ob.floatY + margin;
+    oy2 = ob.floatY + ob.height - margin;
+  } else {
+    ox1 = ob.x + margin;
+    ox2 = ob.x + ob.width - margin;
+    oy1 = ob.y - ob.height + margin;
+    oy2 = ob.y;
+  }
+  return hx1 < ox2 && hx2 > ox1 && hy1 < oy2 && hy2 > oy1;
+}
+
+// ---- GAME ----
+function startGame() {
+  document.getElementById('overlay').style.display = 'none';
+  state = 'running';
+  score = 0;
+  frame = 0;
+  gameSpeed = 5;
+  obstacles = [];
+  particles = [];
+  obstacleCooldown = 80;
+  hare.y = GROUND;
+  hare.vy = 0;
+  hare.dead = false;
+  isDucking = false;
+  jumpCount = 0;
+  initBackground();
+  if (!loopRunning) { loopRunning = true; requestAnimationFrame(loop); }
+}
+
+function gameOver() {
+  state = 'dead';
+  hare.dead = true;
+  spawnDeathParticles(hare.x + hare.width/2, hare.y - hare.currentHeight/2);
+  if (score > hiScore) hiScore = score;
+  document.getElementById('hiVal').textContent = hiScore;
+  setTimeout(() => {
+    const ov = document.getElementById('overlay');
+    ov.style.display = 'flex';
+    const newHi = score > 0 && score >= hiScore;
+    ov.innerHTML = `
+      <h2>WIPED OUT!</h2>
+      <p>The savanna won this time...<br>Score: ${score}</p>
+      ${newHi ? '<p style="color:#f5a623;font-size:8px;margin-top:6px">✨ NEW HI-SCORE! ✨</p>' : ''}
+      <button class="btn" onclick="startGame()">▶ RUN AGAIN</button>
+    `;
+  }, 900);
+}
+
+function loop() {
+  requestAnimationFrame(loop);
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  frame++;
+
+  if (state === 'running') {
+    score++;
+    // Speed: bump by ~400, cruises 11-16 mid-game, hits 21 around score 11000
+    gameSpeed = Math.min(21, 5 + Math.pow(score / 400, 0.52) * 1.7 + (score / 11000) * 9.8 + Math.pow(Math.max(0, score - 11000) / 900, 1.6) * 1.4);
+    document.getElementById('scoreVal').textContent = score;
+    document.getElementById('speedVal').textContent = gameSpeed.toFixed(1);
+
+    obstacleCooldown--;
+    if (obstacleCooldown <= 0) {
+      spawnGroup();
+      // Gap = base frames / gameSpeed so physical screen distance stays wide
+      // Early game: very generous gaps. Higher speed: gaps grow to compensate.
+      const minGap  = score < 800   ? 160 :
+                      score < 2500  ? 140 :
+                      score < 7500  ? 115 : 95;
+      const randExtra = score < 800   ? 140 :
+                        score < 2500  ? 120 :
+                        score < 7500  ? 90  : 65;
+      obstacleCooldown = Math.round((minGap + Math.random() * randExtra) / (gameSpeed / 5));
+    }
+
+    obstacles.forEach(ob => { ob.x -= gameSpeed; });
+    obstacles = obstacles.filter(ob => ob.x + ob.width + 20 > 0);
+
+    hare.update();
+
+    for (const ob of obstacles) {
+      if (checkCollision(ob)) { gameOver(); break; }
+    }
+  }
+
+  // Ground obstacles behind aerial
+  obstacles.filter(o => !o.aerial).forEach(drawObstacle);
+  obstacles.filter(o =>  o.aerial).forEach(drawObstacle);
+
+  if (!hare.dead) hare.draw();
+
+  // Particles
+  particles.forEach(pt => {
+    pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.28; pt.life--;
+    ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+    ctx.fillStyle = pt.color;
+    ctx.fillRect(Math.floor(pt.x), Math.floor(pt.y), 4, 4);
+  });
+  ctx.globalAlpha = 1;
+  particles = particles.filter(pt => pt.life > 0);
+
+  // Duck hint when low bird is approaching
+  if (state === 'running') {
+    const lb = obstacles.find(o => o.aerial && o.floatY > GROUND - 72 && o.x > hare.x + 50 && o.x < hare.x + 230);
+    if (lb) {
+      ctx.fillStyle = '#F5A62380';
+      ctx.font = '7px "Press Start 2P"';
+      ctx.fillText('↓ DUCK!', Math.floor(hare.x - 8), Math.floor(hare.y - hare.currentHeight - 12));
+    }
+  }
+}
+
+// ---- CONTROLS ----
+document.addEventListener('keydown', e => {
+  if (['Space','ArrowUp','KeyW'].includes(e.code)) {
+    e.preventDefault();
+    if (state === 'running') hare.jump();
+    else if (state === 'idle') startGame();
+  }
+  if (['ArrowDown','KeyS'].includes(e.code) && state === 'running') {
+    e.preventDefault();
+    isDucking = true;
+  }
+});
+document.addEventListener('keyup', e => {
+  if (['ArrowDown','KeyS'].includes(e.code)) isDucking = false;
+});
+canvas.addEventListener('click', () => {
+  if (state === 'running') hare.jump();
+  else if (state === 'idle') startGame();
+});
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (state === 'running') hare.jump();
+}, { passive: false });
+
+initBackground();
+</script>
+</body>
+</html>
