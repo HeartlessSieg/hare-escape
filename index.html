@@ -19,7 +19,7 @@
     touch-action: none;
   }
   #hud {
-    width: min(1125px, 100vw);
+    width: min(1294px, 100vw);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -38,16 +38,14 @@
   }
   #scoreBoard {
     display: flex;
-    gap: clamp(8px, 2.5vw, 28px);
+    gap: clamp(14px, 4vw, 44px);
   }
-  #scoreBoard span { color: #e8c9a0; font-size: clamp(5px, 1.6vw, 8px); }
+  #scoreBoard span { color: #e8c9a0; font-size: clamp(7px, 2vw, 12px); }
   #scoreBoard span b { color: #f5a623; }
   #gameWrapper {
     position: relative;
-    /* Scale to fit screen width on mobile, max 1125px on desktop */
-    width: min(1125px, 100vw);
-    /* Keep 1125:450 aspect ratio */
-    aspect-ratio: 1125 / 450;
+    width: min(1294px, 100vw);
+    aspect-ratio: 1294 / 518;
     border: 3px solid #c8620a;
     box-shadow: 0 0 40px #c8620a44;
     overflow: hidden;
@@ -118,7 +116,7 @@
 </div>
 
 <div id="gameWrapper">
-  <canvas id="gameCanvas" width="1125" height="450"></canvas>
+  <canvas id="gameCanvas" width="1294" height="518"></canvas>
   <div id="overlay">
     <h2>THE HARE<br>ESCAPE</h2>
     <p>Race across the African savanna!<br>Dodge obstacles to survive!</p>
@@ -138,7 +136,7 @@ ctx.imageSmoothingEnabled = false;
 const W = canvas.width;
 const H = canvas.height;
 const GROUND = Math.floor(H * 0.667);  // ground at 2/3 down = 240px
-const P = 4;
+const P = 5;
 
 let state = 'idle';
 let score = 0;
@@ -157,9 +155,9 @@ const hare = {
   x: 110,
   y: GROUND,
   vy: 0,
-  width: 32,
-  height: 40,
-  duckHeight: 20,
+  width: 40,
+  height: 50,
+  duckHeight: 25,
   animFrame: 0,
   animTimer: 0,
   dead: false,
@@ -200,17 +198,17 @@ const hare = {
     const p = P;
 
     if (ducking) {
-      ctx.fillStyle = '#C8956C';
+      ctx.fillStyle = '#6B5A4A';
       ctx.fillRect(x, GROUND - p*5, p*9, p*4);
-      ctx.fillStyle = '#DDB080';
+      ctx.fillStyle = '#8A7060';
       ctx.fillRect(x+p*6, GROUND - p*6, p*4, p*2);
-      ctx.fillStyle = '#E06040';
+      ctx.fillStyle = '#A04030';
       ctx.fillRect(x+p*8, GROUND - p*4, p, p);
       ctx.fillStyle = '#2c1a00';
       ctx.fillRect(x+p*7, GROUND - p*5, p, p);
-      ctx.fillStyle = '#FFF8EE';
+      ctx.fillStyle = '#EEE8E0';
       ctx.fillRect(x, GROUND - p*4, p*2, p*2);
-      ctx.fillStyle = '#A06840';
+      ctx.fillStyle = '#4A3828';
       ctx.fillRect(x+p*2, GROUND - p*2, p*2, p*2);
       ctx.fillRect(x+p*5, GROUND - p*2, p*2, p*2);
       return;
@@ -219,33 +217,33 @@ const hare = {
     const baseY = Math.floor(this.y - this.height);
 
     // Ears
-    ctx.fillStyle = '#DDB080';
+    ctx.fillStyle = '#8A7060';
     ctx.fillRect(x+p*3, baseY - p*5, p*2, p*6);
     ctx.fillRect(x+p*5+2, baseY - p*4, p*2, p*5);
-    ctx.fillStyle = '#E06040';
+    ctx.fillStyle = '#A04030';
     ctx.fillRect(x+p*3+1, baseY - p*5+2, p-1, p*4);
     ctx.fillRect(x+p*5+3, baseY - p*4+2, p-1, p*3);
 
     // Head
-    ctx.fillStyle = '#C8956C';
+    ctx.fillStyle = '#6B5A4A';
     ctx.fillRect(x+p*2, baseY, p*6, p*4);
     ctx.fillStyle = '#2c1a00';
     ctx.fillRect(x+p*6, baseY+p, p, p);
-    ctx.fillStyle = '#E06040';
+    ctx.fillStyle = '#A04030';
     ctx.fillRect(x+p*7, baseY+p*2, p, p);
 
     // Body
-    ctx.fillStyle = '#C8956C';
+    ctx.fillStyle = '#6B5A4A';
     ctx.fillRect(x+p, baseY+p*3, p*7, p*5);
-    ctx.fillStyle = '#A06840';
+    ctx.fillStyle = '#4A3828';
     ctx.fillRect(x+p, baseY+p*7, p*7, p*2);
 
     // Tail
-    ctx.fillStyle = '#FFF8EE';
+    ctx.fillStyle = '#EEE8E0';
     ctx.fillRect(x, baseY+p*4, p*2, p*3);
 
     // Legs
-    ctx.fillStyle = '#A06840';
+    ctx.fillStyle = '#4A3828';
     if (inAir) {
       ctx.fillRect(x+p*2, baseY+p*7, p*3, p*2);
       ctx.fillRect(x+p*5, baseY+p*7, p*2, p*2);
@@ -287,18 +285,20 @@ function makeObstacle(x, type) {
     thornbush2:  { w: 60,  h: 24,  aerial: false },
     log:         { w: 40,  h: 20,  aerial: false },
     log_tall:    { w: 20,  h: 40,  aerial: false },
-    bird_low:    { w: 32,  h: 18,  aerial: true, fy: GROUND - 54 },
-    bird_mid:    { w: 32,  h: 18,  aerial: true, fy: GROUND - 95 },
-    bird_high:   { w: 32,  h: 18,  aerial: true, fy: GROUND - 138 },
+    // bird heights are base values — actual fy randomised per spawn below
+    bird_low:    { w: 32,  h: 18,  aerial: true, fyMin: GROUND - 88,  fyMax: GROUND - 62  },
+    bird_mid:    { w: 32,  h: 18,  aerial: true, fyMin: GROUND - 148, fyMax: GROUND - 108 },
+    bird_high:   { w: 32,  h: 18,  aerial: true, fyMin: GROUND - 200, fyMax: GROUND - 155 },
   };
   const d = defs[type];
+  const fy = d.aerial ? Math.floor(d.fyMin + Math.random() * (d.fyMax - d.fyMin)) : 0;
   return {
     x, type,
     width: d.w,
     height: d.h,
-    y: d.aerial ? d.fy + d.h : GROUND,
+    y: d.aerial ? fy + d.h : GROUND,
     aerial: d.aerial,
-    floatY: d.fy || 0,
+    floatY: fy,
     animFrame: 0,
     animTimer: 0,
   };
@@ -365,13 +365,16 @@ function spawnGroup() {
 
   // ── Phase 3: 2000–4000 — all birds, mixed, triples, bird-above intro ──
   } else if (score < 4000) {
-    if (r < 0.18) {
+    if (r < 0.12) {
       group.push(makeObstacle(W + 50, Math.random() < 0.5 ? 'bird_high' : 'bird_mid'));
-    } else if (r < 0.30) {
+    } else if (r < 0.20) {
+      // first taste of low bird
+      group.push(makeObstacle(W + 50, 'bird_low'));
+    } else if (r < 0.32) {
       const ob1 = makeObstacle(W + 50, groundShort[Math.floor(Math.random() * groundShort.length)]);
       group.push(ob1);
       group.push(makeObstacle(ob1.x + ob1.width + birdGap(180), Math.random() < 0.5 ? 'bird_mid' : 'bird_high'));
-    } else if (r < 0.44) {
+    } else if (r < 0.46) {
       groundWithBirdAbove(W + 50);
     } else if (r < 0.64) {
       cluster(2, W + 50);
@@ -381,42 +384,98 @@ function spawnGroup() {
       group.push(makeObstacle(W + 50, groundAll[Math.floor(Math.random() * groundAll.length)]));
     }
 
-  // ── Phase 4: 4000–7500 — full birds, clusters, bird-above combos ──
-  } else if (score < 7500) {
-    if (r < 0.18) {
+  // ── Phase 4: 4000–6500 — full birds, clusters, bird-above combos ──
+  } else if (score < 6500) {
+    if (r < 0.15) {
       group.push(makeObstacle(W + 50, ['bird_low','bird_mid','bird_high'][Math.floor(Math.random()*3)]));
-    } else if (r < 0.32) {
+    } else if (r < 0.26) {
+      // bird flock: two same-height birds in a row
+      const btype = Math.random() < 0.5 ? 'bird_mid' : 'bird_high';
+      const b1 = makeObstacle(W + 50, btype);
+      group.push(b1);
+      group.push(makeObstacle(b1.x + b1.width + birdGap(90), btype));
+    } else if (r < 0.38) {
       const ob1 = makeObstacle(W + 50, groundShort[Math.floor(Math.random() * groundShort.length)]);
       group.push(ob1);
       group.push(makeObstacle(ob1.x + ob1.width + birdGap(170), Math.random() < 0.5 ? 'bird_mid' : 'bird_high'));
-    } else if (r < 0.48) {
+    } else if (r < 0.52) {
       groundWithBirdAbove(W + 50);
-    } else if (r < 0.64) {
+    } else if (r < 0.68) {
       cluster(3, W + 50);
-    } else if (r < 0.80) {
+    } else if (r < 0.84) {
       cluster(4, W + 50);
     } else {
       cluster(2, W + 50);
     }
 
-  // ── Phase 5: 7500+ — max difficulty ──
-  } else {
-    if (r < 0.16) {
-      group.push(makeObstacle(W + 50, ['bird_low','bird_mid','bird_high'][Math.floor(Math.random()*3)]));
-    } else if (r < 0.32) {
+  // ── Phase 5: 6500–9000 — harder combos, new obstacles, bird flocks ──
+  } else if (score < 9000) {
+    if (r < 0.12) {
+      // flock of two at different heights — stagger so duck then jump or vice versa
+      const b1 = makeObstacle(W + 50, 'bird_high');
+      group.push(b1);
+      group.push(makeObstacle(b1.x + b1.width + birdGap(100), 'bird_low'));
+    } else if (r < 0.24) {
+      // flock of three same height
+      const btype = ['bird_mid','bird_high'][Math.floor(Math.random()*2)];
+      const b1 = makeObstacle(W + 50, btype);
+      const b2 = makeObstacle(b1.x + b1.width + birdGap(80), btype);
+      group.push(b1, b2);
+      group.push(makeObstacle(b2.x + b2.width + birdGap(80), btype));
+    } else if (r < 0.36) {
+      // ground + low bird (must jump AND duck in sequence)
       const ob1 = makeObstacle(W + 50, groundShort[Math.floor(Math.random() * groundShort.length)]);
       group.push(ob1);
-      group.push(makeObstacle(ob1.x + ob1.width + birdGap(160), ['bird_mid','bird_high'][Math.floor(Math.random()*2)]));
-    } else if (r < 0.48) {
+      group.push(makeObstacle(ob1.x + ob1.width + birdGap(160), 'bird_low'));
+    } else if (r < 0.50) {
       groundWithBirdAbove(W + 50);
     } else if (r < 0.62) {
-      cluster(3, W + 50);
-    } else if (r < 0.76) {
+      // tight cluster of 4
       cluster(4, W + 50);
-    } else {
+    } else if (r < 0.74) {
+      // two separate ground obstacles with a gap
       const ob1 = makeObstacle(W + 50, groundAll[Math.floor(Math.random() * groundAll.length)]);
       group.push(ob1);
-      group.push(makeObstacle(ob1.x + ob1.width + 20, groundShort[Math.floor(Math.random() * groundShort.length)]));
+      group.push(makeObstacle(ob1.x + ob1.width + birdGap(120), groundShort[Math.floor(Math.random() * groundShort.length)]));
+    } else if (r < 0.86) {
+      cluster(3, W + 50);
+    } else {
+      group.push(makeObstacle(W + 50, ['bird_low','bird_mid','bird_high'][Math.floor(Math.random()*3)]));
+    }
+
+  // ── Phase 6: 9000+ — max difficulty, everything ──
+  } else {
+    if (r < 0.12) {
+      // mixed flock: low + mid birds spaced to require duck then jump
+      const b1 = makeObstacle(W + 50, 'bird_low');
+      group.push(b1);
+      group.push(makeObstacle(b1.x + b1.width + birdGap(110), 'bird_mid'));
+    } else if (r < 0.24) {
+      // flock of three mixed heights
+      const b1 = makeObstacle(W + 50, 'bird_high');
+      const b2 = makeObstacle(b1.x + b1.width + birdGap(75), 'bird_mid');
+      group.push(b1, b2);
+      group.push(makeObstacle(b2.x + b2.width + birdGap(75), 'bird_low'));
+    } else if (r < 0.36) {
+      // ground + flock of two birds after
+      const ob1 = makeObstacle(W + 50, groundShort[Math.floor(Math.random() * groundShort.length)]);
+      const b1 = makeObstacle(ob1.x + ob1.width + birdGap(155), 'bird_mid');
+      group.push(ob1, b1);
+      group.push(makeObstacle(b1.x + b1.width + birdGap(80), 'bird_high'));
+    } else if (r < 0.48) {
+      groundWithBirdAbove(W + 50);
+    } else if (r < 0.60) {
+      cluster(4, W + 50);
+    } else if (r < 0.72) {
+      // two tall obstacles close together
+      const ob1 = makeObstacle(W + 50, groundAll[Math.floor(Math.random() * groundAll.length)]);
+      group.push(ob1);
+      group.push(makeObstacle(ob1.x + ob1.width + 22, groundShort[Math.floor(Math.random() * groundShort.length)]));
+    } else if (r < 0.84) {
+      cluster(3, W + 50);
+    } else {
+      // single low bird — pure duck challenge
+      group.push(makeObstacle(W + 50, 'bird_low'));
     }
   }
 
@@ -428,7 +487,8 @@ function drawObstacle(ob) {
   const p = P;
   const x = Math.floor(ob.x);
   if (ob.aerial) { drawBird(ob); return; }
-  const y = Math.floor(ob.y - ob.height);
+  // Pin y to exact GROUND so no floating — never use ob.y which can drift by float rounding
+  const y = GROUND - ob.height;
 
   if (ob.type === 'rock') {
     ctx.fillStyle = '#9B5A1A';
@@ -592,11 +652,14 @@ function drawBird(ob) {
 function initBackground() {
   // Fixed background acacia silhouettes — static, no scrolling glitch
   bgTrees = [
-    { x: 90,  h: 55 },
-    { x: 280, h: 42 },
-    { x: 490, h: 62 },
-    { x: 670, h: 38 },
-    { x: 760, h: 50 },
+    { x: 220, h: 42 },
+    { x: 420, h: 55 },
+    { x: 620, h: 38 },
+    { x: 780, h: 62 },
+    { x: 920, h: 46 },
+    { x: 1050, h: 50 },
+    { x: 1160, h: 40 },
+    { x: 1240, h: 54 },
   ];
 }
 
@@ -699,26 +762,35 @@ function spawnDeathParticles(x, y) {
 
 // ---- COLLISION ----
 function checkCollision(ob) {
-  const margin = 5;
   const ch = hare.currentHeight;
-  const hx1 = hare.x + margin;
-  const hx2 = hare.x + hare.width - margin;
-  const hy1 = hare.y - ch + margin;
-  const hy2 = hare.y - (isDucking && hare.y >= GROUND ? 4 : 0);
+  // Hare hitbox — slightly inset on sides but full height for aerial
+  const hMargin = 6;
+  const hx1 = hare.x + hMargin;
+  const hx2 = hare.x + hare.width - hMargin;
+  const hy1 = hare.y - ch + 4;
+  const hy2 = hare.y - (isDucking && hare.y >= GROUND ? 6 : 0);
 
   let ox1, ox2, oy1, oy2;
   if (ob.aerial) {
-    ox1 = ob.x + margin;
-    ox2 = ob.x + ob.width - margin;
-    oy1 = ob.floatY + margin;
-    oy2 = ob.floatY + ob.height - margin;
+    // No margin shrink on birds — full hitbox so fast-moving birds can't slip through
+    ox1 = ob.x + 2;
+    ox2 = ob.x + ob.width - 2;
+    oy1 = ob.floatY + 2;
+    oy2 = ob.floatY + ob.height - 2;
+    // Also check one frame ahead (ob.x + gameSpeed) to catch high-speed phasing
+    const ox1next = ox1 - gameSpeed;
+    const ox2next = ox2 - gameSpeed;
+    const xOverlapNext = hx1 < ox2next && hx2 > ox1next;
+    const xOverlapCurr = hx1 < ox2 && hx2 > ox1;
+    const yOverlap = hy1 < oy2 && hy2 > oy1;
+    return (xOverlapCurr || xOverlapNext) && yOverlap;
   } else {
-    ox1 = ob.x + margin;
-    ox2 = ob.x + ob.width - margin;
-    oy1 = ob.y - ob.height + margin;
+    ox1 = ob.x + 4;
+    ox2 = ob.x + ob.width - 4;
+    oy1 = ob.y - ob.height + 4;
     oy2 = ob.y;
+    return hx1 < ox2 && hx2 > ox1 && hy1 < oy2 && hy2 > oy1;
   }
-  return hx1 < ox2 && hx2 > ox1 && hy1 < oy2 && hy2 > oy1;
 }
 
 // ---- GAME ----
@@ -767,22 +839,29 @@ function loop() {
 
   if (state === 'running') {
     score++;
-    // Speed: bump by ~400, cruises 11-16 mid-game, hits 21 around score 11000
-    gameSpeed = Math.min(21, 5 + Math.pow(score / 400, 0.52) * 1.7 + (score / 11000) * 9.8 + Math.pow(Math.max(0, score - 11000) / 900, 1.6) * 1.4);
+    // Speed curve: gentle 5→11.5 over 3000, plateau ~13.5 from 4000-6500, then push to 21
+    gameSpeed = Math.min(21,
+      5
+      + Math.pow(Math.min(score, 3000) / 3000, 0.7) * 6.5           // slow climb: 5→11.5 over first 3000
+      + Math.min(Math.pow(Math.max(0, score - 3000) / 1000, 0.8) * 2.0, 2.0)  // quick bump to ~13.5 by 4000
+      + Math.pow(Math.max(0, score - 6500) / 3000, 0.7) * 5.5       // mid push: 13.5→19 from 6500→9500
+      + Math.pow(Math.max(0, score - 9500) / 1500, 1.4) * 2.0       // final surge to 21
+    );
     document.getElementById('scoreVal').textContent = score;
     document.getElementById('speedVal').textContent = gameSpeed.toFixed(1);
 
     obstacleCooldown--;
     if (obstacleCooldown <= 0) {
       spawnGroup();
-      // Gap = base frames / gameSpeed so physical screen distance stays wide
-      // Early game: very generous gaps. Higher speed: gaps grow to compensate.
-      const minGap  = score < 800   ? 160 :
-                      score < 2500  ? 140 :
-                      score < 7500  ? 115 : 95;
-      const randExtra = score < 800   ? 140 :
-                        score < 2500  ? 120 :
-                        score < 7500  ? 90  : 65;
+      // Gap between obstacle groups. Divide by speed so physical distance stays consistent.
+      const minGap  = score < 800   ? 200 :
+                      score < 2500  ? 180 :
+                      score < 6500  ? 155 :
+                      score < 9000  ? 130 : 110;
+      const randExtra = score < 800   ? 170 :
+                        score < 2500  ? 150 :
+                        score < 6500  ? 120 :
+                        score < 9000  ? 90  : 70;
       obstacleCooldown = Math.round((minGap + Math.random() * randExtra) / (gameSpeed / 5));
     }
 
@@ -814,7 +893,7 @@ function loop() {
 
   // Duck hint when low bird is approaching
   if (state === 'running') {
-    const lb = obstacles.find(o => o.aerial && o.floatY > GROUND - 72 && o.x > hare.x + 50 && o.x < hare.x + 230);
+    const lb = obstacles.find(o => o.aerial && o.floatY > GROUND - 95 && o.x > hare.x + 50 && o.x < hare.x + 230);
     if (lb) {
       ctx.fillStyle = '#F5A62380';
       ctx.font = '7px "Press Start 2P"';
